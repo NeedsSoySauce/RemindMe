@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 
 import requests
 from bs4 import BeautifulSoup
+import boto3
 
 SMTP_HOST = os.environ['SMTP_HOST']
 SMTP_PORT = os.environ['SMTP_PORT']
@@ -15,6 +16,11 @@ SMPT_PASSWORD = os.environ['SMPT_PASSWORD']
 SENDER = os.environ['SENDER']
 
 URL = os.environ['URL']
+
+RECORD_KEY = "remindme-state"
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('RemindMeState')
 
 
 def main():
@@ -39,29 +45,57 @@ def main():
     collection_date = datetime.strptime(date_elem.string, datetime_format)
     collection_date = collection_date.replace(year=datetime.now().year)
 
+    last_item = None
     try:
-        s = smtplib.SMTP(host=SMTP_HOST, port=SMTP_PORT)
-        s.ehlo()
-        s.starttls()
-        s.ehlo()
-        s.login(SMTP_USERNAME, SMPT_PASSWORD)
+        last_item = table.get_item(Key={'key': RECORD_KEY})['Item']
+    except KeyError:
+        # No document
+        pass
 
-        msg = MIMEMultipart()
+    if last_item is None or \
+       last_item['rubbish'] != is_rubbish_due or \
+       last_item['recycling'] != is_recycling_due:
 
-        msg['From'] = SENDER
-        msg['To'] = SENDER
-        msg['Subject'] = "Reminder"
+        table.put_item(
+            Item={
+                'key': RECORD_KEY,
+                'rubbish': is_rubbish_due,
+                'recycling': is_recycling_due
+            })
 
-        msg.attach(MIMEText('Hello world!'))
+        try:
+            s = smtplib.SMTP(host=SMTP_HOST, port=SMTP_PORT)
+            s.ehlo()
+            s.starttls()
+            s.ehlo()
+            s.login(SMTP_USERNAME, SMPT_PASSWORD)
 
-        # send the message via the server set up earlier.
-        s.send_message(msg)
-        s.close()
-    except Exception as e:
-        print("Error: ", e)
-    else:
-        print("Email sent!")
+            msg = MIMEMultipart()
 
+            msg['From'] = SENDER
+            msg['To'] = SENDER
+            msg['Subject'] = "Reminder"
+
+            msg.attach(MIMEText(generate_message(is_rubbish_due, is_recycling_due)))
+
+            # send the message via the server set up earlier.
+            s.send_message(msg)
+            s.close()
+        except Exception as e:
+            print("Error sending email: ", e)
+        else:
+            print("Email sent!")
+
+def generate_message(rubbish, recycling):
+    message = ""
+
+    if (rubbish):
+        message += "Rubbish due"
+
+    if (recycling):
+        message += "Recycling due"
+
+    return message
 
 def lambda_handler(event, context):
     main()
