@@ -17,10 +17,11 @@ SENDER = os.environ['SENDER']
 
 URL = os.environ['URL']
 
+TABLE_NAME = os.environ["TABLE_NAME"]
 RECORD_KEY = "remindme-state"
 
 dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table('RemindMeState')
+table = dynamodb.Table('TABLE_NAME')
 
 
 def main():
