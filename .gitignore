@@ -1,2 +1,4 @@
 .env
 /package
+.vscode/.ropeproject/config.py
+.vscode/.ropeproject/objectdb
